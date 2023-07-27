@@ -1,37 +1,73 @@
 const Model = require("../models/userModel");
 const express = require("express");
 const router = express.Router();
+const bcrypt = require("bcrypt");
+
+const saltRounds = 10;
 
 router.post("/signup", (req, res) => {
   console.log(req.body);
 
-  new Model(req.body)
-    .save()
-    .then((data) => {
-      res.status(200).json(data);
-    })
-    .catch((err) => {
+  const formData = req.body;
+
+  // Hash the password
+  bcrypt.hash(formData.password, saltRounds, (err, hash) => {
+    if (err) {
       console.error(err);
-      res.status(500).json(err);
-    });
+      return res.status(500).json(err);
+    }
+
+    // Replace the plain password with the hashed password
+    formData.password = hash;
+
+    // Save the user data to the database
+    new Model(formData)
+      .save()
+      .then((data) => {
+        res.status(200).json(data);
+      })
+      .catch((err) => {
+        console.error(err);
+        res.status(500).json(err);
+      });
+  });
 });
 
 router.post("/login", (req, res) => {
   console.log(req.body);
 
-  const formdata = req.body;
+  const formData = req.body;
 
-  Model.findOne({ email: formdata.email, password: formdata.password })
+  Model.findOne({ email: formData.email })
     .then((data) => {
       if (data) {
-        if (data.password == formdata.password) {
-          res.status(200).json(data);
-        } else {
-          res.status(300).json({ message: "password incorrect" });
-        }
+        // Compare the hashed password with the provided password
+        bcrypt.compare(formData.password, data.password, (err, result) => {
+          if (err) {
+            console.error(err);
+            return res.status(500).json(err);
+          }
+          if (result) {
+            // Passwords match, return user data
+            res.status(200).json(data);
+          } else {
+            // Passwords don't match
+            res.status(300).json({ message: "Password incorrect" });
+          }
+        });
       } else {
-        res.status(300).json({ message: "email not found" });
+        res.status(300).json({ message: "Email not found" });
       }
+    })
+    .catch((err) => {
+      res.status(500).json(err);
+    });
+});
+
+router.get("/getall", async (req, res) => {
+  Model.find({})
+    .then((data) => {
+      res.status(200).json(data);
     })
     .catch((err) => {
       res.status(500).json(err);
